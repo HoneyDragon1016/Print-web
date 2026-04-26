@@ -11,14 +11,13 @@ async function cleanupOldFiles(uploadsDir: string) {
   try {
     const files = await readdir(uploadsDir);
     const now = Date.now();
-    const twoHours = 2 * 60 * 60 * 1000; // 2小時的毫秒數
+    const twoHours = 2 * 60 * 60 * 1000;
 
     for (const file of files) {
       const filePath = path.join(uploadsDir, file);
       const fileStat = await stat(filePath);
-      // 如果檔案的最後修改時間距離現在超過 2 小時，就刪除它
       if (now - fileStat.mtimeMs > twoHours) {
-        await unlink(filePath).catch(() => {}); // 靜默處理刪除錯誤
+        await unlink(filePath).catch(() => {});
       }
     }
   } catch (err) {
@@ -31,18 +30,47 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const userPasscode = formData.get('passcode') as string;
-    const colorMode = formData.get('colorMode') as string || 'color'; // 預設為彩色
+    const colorMode = formData.get('colorMode') as string || 'color';
+    
+    // 🛡️ 1. 取得前端傳來的 Turnstile Token
+    const turnstileToken = formData.get('cf-turnstile-response') as string;
 
     if (!file || !userPasscode) {
       return NextResponse.json({ error: '缺少檔案或密碼' }, { status: 400 });
     }
+    
+    // 🛡️ 2. 攔截沒有夾帶人機驗證 Token 的非法請求
+    if (!turnstileToken) {
+      return NextResponse.json({ error: '請完成人機驗證' }, { status: 401 });
+    }
 
-    // 🔒 後端雙重檢查檔案大小 (20MB = 20 * 1024 * 1024 bytes)
     if (file.size > 20 * 1024 * 1024) {
       return NextResponse.json({ error: '檔案超出 20MB 限制' }, { status: 400 });
     }
 
-    // --- 一次性密碼驗證邏輯 ---
+    // 🛡️ 3. 向 Cloudflare 發送驗證請求 (讀取環境變數中的金鑰)
+    const SECRET_KEY = process.env.TURNSTILE_SECRET_KEY; 
+
+    if (!SECRET_KEY) {
+      console.error("🔥 系統未設定 TURNSTILE_SECRET_KEY 環境變數");
+      return NextResponse.json({ error: '伺服器設定錯誤' }, { status: 500 });
+    }
+
+    const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `secret=${SECRET_KEY}&response=${turnstileToken}`,
+    });
+
+    const verifyData = await verifyRes.json();
+    
+    // 🛡️ 4. 如果 Cloudflare 說這不是真人，直接退回
+    if (!verifyData.success) {
+      console.error("機器人攻擊攔截:", verifyData);
+      return NextResponse.json({ error: '人機驗證失敗' }, { status: 401 });
+    }
+
+    // --- 🔐 以下為原本的一次性密碼驗證邏輯 ---
     const passcodeFilePath = path.join(process.cwd(), 'passcodes.txt');
     const passcodesContent = await readFile(passcodeFilePath, 'utf-8');
     const passcodes = passcodesContent.split(/\r?\n/).filter(line => line.trim() !== '');
@@ -55,7 +83,7 @@ export async function POST(request: Request) {
     await updateFile(passcodeFilePath, passcodes.join('\n'));
     // ----------------------------
 
-    // 🏷️ 1. 為檔案加上時間戳記前綴，避免檔名衝突
+    // 🏷️ 為檔案加上時間戳記前綴
     const uniqueFilename = `${Date.now()}_${file.name}`;
     const uploadsDir = path.join(process.cwd(), 'uploads');
     const filePath = path.join(uploadsDir, uniqueFilename);
@@ -64,18 +92,14 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(bytes);
     await writeFile(filePath, buffer);
 
-    // 🧹 4. 觸發自動清理機制 (不使用 await 阻塞列印流程，讓它在背景跑)
     cleanupOldFiles(uploadsDir);
 
     const sumatraPath = path.join(process.cwd(), 'node_modules', 'pdf-to-printer', 'dist', 'SumatraPDF-3.4.6-32.exe');
-
-    // 🎨 2. 黑白/彩色參數設定
     const printSettings = colorMode === 'monochrome' ? 'monochrome' : 'color';
 
-    // 執行列印
     await execFileAsync(sumatraPath, [
       '-print-to', 'EPSON L360 Series',
-      '-print-settings', printSettings, // 傳遞色彩設定給 SumatraPDF
+      '-print-settings', printSettings,
       '-silent',
       filePath
     ]);
