@@ -10,7 +10,9 @@
   },
   "dependencies": {
     "@marsidev/react-turnstile": "^1.5.0",
+    "image-size": "^2.0.2",
     "next": "16.2.4",
+    "pdf-lib": "^1.17.1",
     "pdf-to-printer": "^5.7.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"

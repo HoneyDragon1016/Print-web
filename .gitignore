@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# 列印系統動態產生檔案
+uploads/
+passcodes.txt
