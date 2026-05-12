@@ -11,6 +11,7 @@
   "dependencies": {
     "@marsidev/react-turnstile": "^1.5.0",
     "image-size": "^2.0.2",
+    "lucide-react": "^1.14.0",
     "next": "16.2.4",
     "pdf-lib": "^1.17.1",
     "pdf-to-printer": "^5.7.0",
