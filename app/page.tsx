@@ -218,6 +218,7 @@ export default function Home() {
           <input type="password" placeholder={t[lang].passcode} value={passcode} onChange={(e) => setPasscode(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 text-center tracking-widest font-mono shadow-inner" />
 
           <div className="flex justify-center scale-90">
+            {/* ⚙️ 小工具設定：注意這裡記得替換成你的Turnstile site key */}
             <Turnstile siteKey="0x4AAAAAADDsQnq-Tr8bwOuV" onSuccess={(token) => setTurnstileToken(token)} options={{ theme: 'dark' }} />
           </div>
 
